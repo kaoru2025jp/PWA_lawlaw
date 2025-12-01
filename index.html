@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+<meta charset="utf-8" />
+<title>条文切替 — 切り返しサンプル</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{font-family: "Yu Gothic","Hiragino Kaku Gothic ProN",Meiryo, sans-serif;}
+  body{padding:18px; background:#fff; color:#222;}
+  h1{font-size:1.2rem; margin-bottom:8px;}
+  .controls{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  select, button{padding:8px 10px; font-size:0.95rem; border-radius:6px; border:1px solid #ccc; background:#fafafa;}
+  button.primary{background:#2b7cff; color:#fff; border-color:#1e62c9;}
+  button.ghost{background:#fff; border:1px dashed #bbb;}
+  .panel{display:flex; gap:12px; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap;}
+  .box{flex:1 1 340px; min-width:260px; border:1px solid #dcdcdc; border-radius:8px; padding:10px; background:#fbfbff;}
+  .box h3{margin:0 0 6px 0; font-size:0.95rem;}
+  pre{white-space:pre-wrap; word-break:break-word; margin:0; background:#fff; padding:10px; border-radius:6px; border:1px solid #eee; max-height:420px; overflow:auto;}
+  .arrow{display:flex; align-items:center; gap:10px; justify-content:center; font-size:1.4rem; color:#666;}
+  .small-actions{display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;}
+  .notice{font-size:0.85rem; color:#555; margin-top:8px;}
+  .fade-enter{opacity:0; transform:translateY(8px);}
+  .fade-enter-active{transition:all 240ms ease; opacity:1; transform:none;}
+</style>
+</head>
+<body>
+  <h1>条文切替（切り返し表示サンプル）</h1>
+
+  <div class="controls">
+    <label>
+      ケース：
+      <select id="caseSelect">
+        <option value="case1">① 可罰性（高 ⇄ 低） を想定したケース</option>
+        <option value="case2">② 私文書偽造 / 公文書偽造 → 謄本操作 のケース</option>
+      </select>
+    </label>
+
+    <label>
+      表示：
+      <select id="viewSelect">
+        <option value="A">A（出発点）</option>
+        <option value="B">B（切り返し）</option>
+      </select>
+    </label>
+
+    <button id="showBtn" class="primary">表示</button>
+    <button id="flipBtn">A⇄B 切替</button>
+    <button id="dualBtn" class="ghost">切り返し表示（A → B）</button>
+  </div>
+
+  <div class="small-actions">
+    <button id="copyBtn">表示をコピー</button>
+    <button id="copyDualBtn">A→B をコピー</button>
+    <button id="downloadBtn">テキストで保存</button>
+  </div>
+
+  <div class="panel">
+    <div class="box">
+      <h3>A（出発点）</h3>
+      <pre id="displayA">ここにAが表示されます</pre>
+    </div>
+
+    <div class="arrow" aria-hidden>→</div>
+
+    <div class="box">
+      <h3>B（切り返し）</h3>
+      <pre id="displayB">ここにBが表示されます</pre>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:6px;">
+    <div style="flex:1 1 640px">
+      <div class="notice">
+        使い方：ケースを選んで「表示」または「切り返し表示」を押してください。<br>
+        「切り返し表示」は A（出発）→ B（切り返し）の対比を並べて見せます。表示内容はコピー・保存できます。<br>
+        ※ 本ページは学習用サンプルです。法的助言を提供するものではありません。
+      </div>
+    </div>
+  </div>
+
+<script>
+/* --- サンプルデータ（ここに実際の文言を載せる） --- */
+/* 注意：法的解釈を与えるものではありません。学習/表示用のサンプルです。 */
+const CASES = {
+  case1: {
+    label: "可罰性（高 ⇄ 低）ケース",
+    A: `【A】可罰性が高いケース（例示）
+- 事件類型：刑法に該当し、捜査段階で強い刑事責任が想定される。
+- 特徴：故意性が明確、被害が重大、違法性の認識が高い。
+- 例：窃盗や侵害行為などで被害回復が困難な場合や、公衆に重大な害を及ぼす場合。`,
+
+    B: `【B】可罰性が相対的に低いケース（例示）
+- 事件類型：刑事処分が軽微で、書類送検で終わることが多いケース。
+- 特徴：被害が軽微、改悛や被害弁済が行われた場合、立証困難な場合。
+- 例：軽微な詐欺未遂、単純な業務上過失などで書類送検後不起訴となるケース。`
+  },
+
+  case2: {
+    label: "私文書偽造 / 公文書偽造 と謄本操作 のケース",
+    A: `【A】私文書偽造・公文書偽造（出発点の事例）
+- 私文書偽造：個人間の契約書類や私的な証書の改竄・偽造。刑事責任が問われる場合がある。
+- 公文書偽造：自治体や公的機関が作成する文書の改竄・偽造。より重い処罰の対象となる。
+- 具体例：遺産分割協議書になりすました文書、偽の署名や日付を用いた改竄など。`,
+
+    B: `【B】利益相反・謄本（登記事項）操作の切り返し（対比）
+- 利益相反：当事者が自己の利益を優先し、相手方に不利な取引を行った場合の問題。
+- 謄本の内容操作：登記事項（不動産登記簿等）や写しの改変は、民事上・刑事上の問題を引き起こす可能性がある。
+- 具体例：相続関係で他の相続人の不利益を隠すために写しを改竄、あるいは手続上の虚偽を作る行為。`
+  }
+};
+
+/* --- DOM --- */
+const caseSelect = document.getElementById("caseSelect");
+const viewSelect = document.getElementById("viewSelect");
+const showBtn = document.getElementById("showBtn");
+const flipBtn = document.getElementById("flipBtn");
+const dualBtn = document.getElementById("dualBtn");
+const displayA = document.getElementById("displayA");
+const displayB = document.getElementById("displayB");
+const copyBtn = document.getElementById("copyBtn");
+const copyDualBtn = document.getElementById("copyDualBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+
+/* 初期表示 */
+function renderSelected() {
+  const cs = caseSelect.value;
+  const view = viewSelect.value;
+  displayA.textContent = CASES[cs].A;
+  displayB.textContent = CASES[cs].B;
+  // 表示モードに応じて片側だけを薄くするなど（視覚補助）
+  if (view === "A") {
+    displayA.parentElement.style.opacity = "1";
+    displayB.parentElement.style.opacity = "0.45";
+  } else {
+    displayA.parentElement.style.opacity = "0.45";
+    displayB.parentElement.style.opacity = "1";
+  }
+}
+
+/* イベント */
+showBtn.addEventListener("click", () => {
+  renderSelected();
+  // 視覚的なフィードバック（少しアニメ）
+  highlightBox();
+});
+
+flipBtn.addEventListener("click", () => {
+  // A/B の選択を入れ替え
+  viewSelect.value = (viewSelect.value === "A") ? "B" : "A";
+  renderSelected();
+  highlightBox();
+});
+
+dualBtn.addEventListener("click", () => {
+  // 切り返し表示（A → B）として両方を強調して見せる
+  renderSelected();
+  animateDual();
+});
+
+/* コピー機能 */
+copyBtn.addEventListener("click", async () => {
+  const view = viewSelect.value;
+  const text = (view === "A") ? CASES[caseSelect.value].A : CASES[caseSelect.value].B;
+  try {
+    await navigator.clipboard.writeText(text);
+    alert("表示内容をクリップボードにコピーしました。");
+  } catch (e) {
+    // クリップボードが使えない場合のフォールバック
+    prompt("コピー用テキスト（Ctrl+Cでコピーしてください）", text);
+  }
+});
+
+copyDualBtn.addEventListener("click", async () => {
+  const cur = CASES[caseSelect.value];
+  const dualText = `--- A（出発） ---\n${cur.A}\n\n--- B（切り返し） ---\n${cur.B}`;
+  try {
+    await navigator.clipboard.writeText(dualText);
+    alert("A→B の内容をクリップボードにコピーしました。");
+  } catch (e) {
+    prompt("A→B の内容（Ctrl+Cでコピー）", dualText);
+  }
+});
+
+/* ダウンロード（テキスト） */
+downloadBtn.addEventListener("click", () => {
+  const cur = CASES[caseSelect.value];
+  const filename = `${caseSelect.value}-A-B.txt`;
+  const content = `ケース: ${CASES[caseSelect.value].label}\n\n--- A（出発） ---\n${cur.A}\n\n--- B（切り返し） ---\n${cur.B}\n`;
+  const blob = new Blob([content], {type: "text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* 視覚効果 */
+function highlightBox() {
+  // 簡単なフェードを付ける
+  [displayA, displayB].forEach(el => {
+    el.classList.remove("fade-enter");
+    void el.offsetWidth;
+    el.classList.add("fade-enter");
+  });
+  setTimeout(()=> {
+    [displayA, displayB].forEach(el => {
+      el.classList.remove("fade-enter");
+    });
+  }, 250);
+}
+
+function animateDual() {
+  // 両方を同時に強調表示（A→Bを直感的に見せる）
+  displayA.parentElement.style.opacity = "1";
+  displayB.parentElement.style.opacity = "1";
+  highlightBox();
+}
+
+/* 初期化 */
+renderSelected();
+</script>
+</body>
+</html>
+
